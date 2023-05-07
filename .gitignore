@@ -1,0 +1,2 @@
+# ignore self-compiled jar file
+files/tomcat-vault-*.jar
