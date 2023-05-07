@@ -1,0 +1,6 @@
+#!/bin/sh
+
+{% if jprofiler_install %}
+export JAVA_OPTS="$JAVA_OPTS -agentpath:/opt/jprofiler{{ jprofiler_major_version }}/bin/linux-x64/libjprofilerti.so=port={{ jprofiler_port }},nowait"
+{% endif %}
+

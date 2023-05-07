@@ -1,0 +1,19 @@
+---
+dependencies: []
+
+galaxy_info:
+  author: Jerome Jouanin
+  role_name: tomcat
+  description: An Ansible Role that install and manage an Apache Tomcat server.
+  license: None
+  min_ansible_version: 2.9
+  github_branch: main
+  platforms:
+    - name: EL
+      versions:
+        - all
+    - name: Debian
+      versions:
+        - all
+  galaxy_tags:
+    - tomcat

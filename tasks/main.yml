@@ -1,0 +1,20 @@
+---
+#- name: Set fact catalina_base
+#  set_fact:
+#    catalina_base: "{{ tomcat_root_dir }}/{{ tomcat_minor_version | splitext | first }}/{{ server_type }}_{{ tomcat_instance_num }}"
+
+# Attention ne traite que l'instance passée en paramètre ..
+- include_tasks: tomcat_instance_destroy.yml
+  when: reinstall_software
+
+- include_tasks: tomcat_install_catalina_base.yml
+
+- include_tasks: tomcat_vault.yml
+  when: tomcat_vault
+
+- include_tasks: keystore_management.yml
+
+- include_tasks: tomcat_jprofiler.yml
+  when: jprofiler_install
+
+- include_tasks: tomcat_instance_create.yml

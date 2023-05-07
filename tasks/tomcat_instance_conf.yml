@@ -1,0 +1,67 @@
+---
+#- name: install jprofiler
+#  include_tasks: tomcat_jprofiler.yml
+#  when: jprofiler_install
+
+#- name: Copy setenv.sh
+#  become: true
+#  template:
+#    src: setenv.sh.j2
+#    dest: "{{ catalina_base }}/bin/setenv.sh"
+#    mode: 0750
+#    owner: "{{ tomcat_instance_user }}"
+#    group: "{{ tomcat_instance_group }}"
+#
+#  # when: tomcat_version == 9
+#- name: Copy server.xml
+#  become: true
+#  template:
+#    src: server.xml.j2
+#    dest: "{{ catalina_base }}/conf/server.xml"
+#    mode: 0640
+#    owner: "{{ tomcat_instance_user }}"
+#    group: "{{ tomcat_instance_group }}"
+#
+#- name: create /etc/{{ tomcat_instance_name }}
+#  become: true
+#  file:
+#    path: /etc/{{ tomcat_instance_name }}
+#    state: directory
+#    mode: 0750
+#    owner: "{{ tomcat_instance_user }}"
+#    group: "{{ tomcat_instance_group }}"
+#
+#- name: copy tomcat service file
+#  become: true
+#  template:
+#    src: tomcat.service.j2
+#    dest: /etc/systemd/system/{{ tomcat_service }}.service
+#  # when: tomcat_version == 8
+
+- name: copy tomcat logrotate configuration file
+  become: true
+  template:
+    src: logrotate_tomcat.j2
+    dest: /etc/logrotate.d/{{ tomcat_service }}
+
+#- name: enable and start "{{ tomcat_service }}" service
+#  become: true
+#  systemd:
+#    name: "{{ tomcat_service }}"
+#    enabled: yes
+#    state: restarted
+#    daemon_reload: yes
+#  # notify: restart {{ tomcat_service }}
+#  # when:
+#  #   - not tomcat8_installed.stat.exists
+
+## le rep work est cree avec le start de tomcat ..
+#- name: set owner to directory work
+#  become: true
+#  file:
+#    path: "{{ catalina_base }}/work"
+#    state: directory
+#    owner: "{{ tomcat_instance_user }}"
+#    group: "{{ tomcat_instance_group }}"
+#    mode: 0750
+#    recurse: yes

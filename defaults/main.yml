@@ -1,0 +1,109 @@
+---
+# java vars (cf role java)
+openjdk_distrib: adoptium # ou adoptopenjdk
+# ATTENTION éviter jre car les paquets jre ne sont pas signés, ce qui provoque une erreur d'installation
+jre_or_jdk: jdk
+# ATTENTION les quotes sont nécessaires car var utilisée en ajout de string d'autres vars
+java_version: '8' # ou '11' (testé et validé)
+openjdk_package_name: "{{
+    'adoptopenjdk-' + java_version + '-hotspot' if openjdk_distrib == 'adoptopenjdk' else
+    'temurin-' + java_version + '-' + jre_or_jdk if openjdk_distrib == 'adoptium'
+}}"
+java_home: "{{
+    '/usr/lib/jvm/adoptopenjdk-' + java_version + '-hotspot-amd64' if ansible_os_family == 'Debian' and openjdk_distrib == 'adoptopenjdk' else
+    '/usr/lib/jvm/adoptopenjdk-' + java_version + '-hotspot' if ansible_os_family == 'RedHat' and openjdk_distrib == 'adoptopenjdk' else
+    '/usr/lib/jvm/temurin-' + java_version + '-' + jre_or_jdk + '-amd64' if ansible_os_family == 'Debian' and openjdk_distrib == 'adoptium' else
+    '/usr/lib/jvm/temurin-' + java_version + '-' + jre_or_jdk if ansible_os_family == 'RedHat' and openjdk_distrib == 'adoptium'
+}}"
+
+# gestion mode normal ou local : sans accès à internet
+install_mode: normal # ou local
+#local_base_url: "https://my_nexus.net/nexus/repository/my_repo"
+
+reinstall_software: false # Attention au multi instance ..
+tomcat_role_goal: install # ou update_keystore pour juste mettre à jour les certif dans un keystore existant (compatibilité avec le playbook copy_certs)
+
+# app env vars
+deploy_app: false # var utilisée uniquement dans Vagrantfile .. à voir
+server_type: app # ou ws ou rien pour d'éventuelles install non standard
+
+# certs and domain vars
+# param domain peut être surchargé ..
+domain: mydomain.net
+tomcat_certificate_alias: "{{ domain }}"
+certificate_root_directory: /etc/ssl
+certificates_list:
+  - name: mydomain.net
+    ca_certificate: GandiStandardSSLCA2.pem
+certificate_path: "{{ certificate_root_directory }}/{{ tomcat_certificate_alias }}"
+certificate_file: "{{ tomcat_certificate_alias }}.crt"
+certificate_key_file: "{{ tomcat_certificate_alias }}.key"
+ca_certificate: "{{ 'GandiStandardSSLCA2.pem' if domain is search('mydomain') }}"
+cacerts_path: "{{ '/etc/ssl/certs/java/cacerts' if ansible_os_family == 'Debian' else '/etc/pki/ca-trust/extracted/java/cacerts' if ansible_os_family == 'RedHat' }}"
+# le param keystore_name peut être passé par le Jenkinsfile.jdp
+#keystore_name: ""
+keystore_name: "{{ tomcat_instance_name }}.keystore"
+# keystore_pwd est dans les vars (encryptées avec vault) du playbook appelant
+#keystore_pwd:
+recreate_keystore: true # car changement du mot de passe et de l'emplacement historique du keystore ..
+JENKINS: False
+
+# httpd vars
+plage_port: 7000
+http_port: "{{ plage_port + 1000 * tomcat_instance_num + 80 }}"
+https_port: "{{ plage_port + 1000 * tomcat_instance_num + 443 }}"
+#apache_servername: "{{ client }}-{{ environnement }}.mydomain.net" # ou "{{ client }}-ws-{{ environnement }}.mydomain.net"
+apache_servername: "{{ client + '-' + environnement + '.' + domain if server_type == 'app' else client + '-ws-' + environnement + '.' + domain if server_type == 'ws' }}"
+cert_path_tmp: ./roles/manage_software/files
+
+# Tomcat vars
+tomcat_https: true
+tomcat_servername: "{{ apache_servername }}"
+tomcat_domain: "{{ domain }}"
+tomcat_root_dir: /opt/tomcat
+tomcat_instance_user: "tomcat_{{ server_type }}_{{ tomcat_instance_num }}"
+tomcat_instance_group: "tomcat_{{ server_type }}_{{ tomcat_instance_num }}"
+tomcat_minor_version: 8.5.88
+tomcat_medium_version: "{{ tomcat_major_version + '.' + tomcat_minor_version.split('.')[1] }}"
+tomcat_major_version: "{{ tomcat_minor_version.split('.')[0] }}"
+tomcat_dl_url: "https://archive.apache.org/dist/tomcat/tomcat-{{ tomcat_major_version }}/v{{ tomcat_minor_version }}/bin/apache-tomcat-{{ tomcat_minor_version }}.tar.gz"
+tomcat_service: "tomcat_{{ server_type }}_{{ tomcat_instance_num }}"
+tomcat_instance_name: "{{ server_type }}_{{ tomcat_instance_num }}"
+catalina_base: "{{ tomcat_root_dir }}/{{ tomcat_minor_version | splitext | first }}/{{ tomcat_instance_name }}"
+shutdown_port: "{{ plage_port + 1000 * tomcat_instance_num + 5 }}"
+ajp_port: "{{ plage_port + 1000 * tomcat_instance_num + 9 }}" # ajp a supprimer prochainement ..
+tomcat_instance_num: 1
+java_Xm_conf: '-Xms2048M -Xmx3072M' # historiquement 4096M ..
+tomcat_ssl_protocols: "SSLv2Hello,+TLSv1.2,+TLSv1.3"
+tomcat_maxThreads: "200"
+tomcat_minSpareThreads: "10"
+tomcat_connectionTimeout: "20000"
+useless_file:
+  - LICENSE
+  - NOTICE
+  - RELEASE-NOTES
+  - RUNNING.txt
+  - bin/startup.bat
+  - bin/digest.bat
+  - bin/catalina.bat
+  - bin/tool-wrapper.bat
+  - bin/version.bat
+  - bin/ciphers.bat
+  - bin/configtest.bat
+  - bin/setclasspath.bat
+  - bin/shutdown.bat
+tomcat_service_action: restarted # reloaded, restarted, started, stopped
+tomcat_vault: false
+tomcat_vault_jar_filename: tomcat-vault-adoptjava8.jar # this jar must be in files dir
+tomcat_vault_recreate_keystore: true
+# vault_keystore_pwd est dans les vars (encryptées avec vault) du playbook appelant
+#vault_keystore_pwd:
+
+# jprofiler vars
+jprofiler_install: true
+jprofiler_force_install: false
+jprofiler_version: "12_0_4" # 13_0_5 au 30/01/2023
+jprofiler_dl_url: "https://download.ej-technologies.com/jprofiler/jprofiler_linux-x64_{{ jprofiler_version }}.tar.gz"
+jprofiler_major_version: "{{ jprofiler_version.split('_')[0] }}"
+#jprofiler_install_path: "/opt/jprofiler{{ jprofiler_major_version }}"
+jprofiler_port: "{{ plage_port + 1000 * tomcat_instance_num + 849 }}"

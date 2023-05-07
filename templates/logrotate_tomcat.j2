@@ -1,0 +1,24 @@
+{{ catalina_base }}/logs/catalina.out {
+  copytruncate
+  daily
+  rotate 31
+  compress
+  delaycompress
+  missingok
+  create 640 {{ tomcat_instance_user }} {{ tomcat_instance_group }}
+  postrotate
+    /usr/bin/nice /usr/bin/find {{ catalina_base }}/logs/ -type f -mtime +31 -exec /bin/rm {} \; > /dev/null
+#    /sbin/service rsyslog restart
+  endscript
+}
+{% if server_type == "web" %}
+{{ catalina_base }}/logs/app.log {
+  copytruncate
+  daily
+  rotate 31
+  compress
+  delaycompress
+  missingok
+  create 640 {{ tomcat_instance_user }} {{ tomcat_instance_group }}
+}
+{% endif %}

@@ -1,0 +1,210 @@
+---
+# Optim à voir pour répondre à ce message de démarrage :
+# The APR based Apache Tomcat Native library which allows optimal performance in production environments was not found on the java.library.path
+#- name: install tomcat-native when Debian
+#  package:
+#    name: "{{ item }}"
+#  loop:
+#    - libapr1.0-dev
+#    - libssl-dev
+#  when: ansible_os_family == 'Debian'
+#- name: install tomcat-native when RedHat
+#  package:
+#    name: "{{ item }}"
+#  loop:
+#    - apr-devel
+#    - openssl-devel
+#  when: ansible_os_family == 'RedHat'
+
+- name: check if port is available
+  become: true
+  shell: "find {{ tomcat_root_dir }} -name server.xml|grep -v {{ catalina_base }}/conf/server.xml |xargs grep -q '<Connector port=\"{{ http_port }}\" protocol=\"HTTP/1.1'"
+  register: is_port_available
+  ignore_errors: true
+
+- name: assert port is available
+  assert:
+    that:
+      - is_port_available.rc != 0
+    msg: "port is already used, change tomcat_instance_num parameter !"
+
+# Avec le mode_install local, on peut avoir un conflit de variables tomcat_minor_version et tomcat_dl_url ..
+# mais dommage ce test de sécurité ne fonctionne pas :'(
+#- name: assert same version in vars tomcat_minor_version / tomcat_dl_url
+#  assert:
+#    that:
+#      - tomcat_minor_version == tomcat_dl_url|regex_replace('^(.*)apache-tomcat-(.*).tar.gz','\2')
+#    msg: "versions conflict in tomcat_minor_version and tomcat_dl_url !"
+
+- name: Add the tomcat group
+  become: true
+  group:
+    name: tomcat
+- name: Add the tomcat user
+  become: true
+  user:
+    name: tomcat
+    comment: tomcat
+    group: tomcat
+
+- name: Add the "{{ tomcat_instance_group }}" group
+  become: true
+  group:
+    name: "{{ tomcat_instance_group }}"
+  # when: tomcat_version == 8
+- name: Add the "{{ tomcat_instance_user }}" user
+  become: true
+  user:
+    name: "{{ tomcat_instance_user }}"
+    comment: "{{ tomcat_instance_user }}"
+    group: "{{ tomcat_instance_group }}"
+  # when: tomcat_version == 8
+
+# catalina_base: "{{ tomcat_root_dir }}/{{ tomcat_minor_version | splitext | first }}/{{ server_type }}_{{ tomcat_instance_num }}"
+- name: check if {{ catalina_base }} exists
+  stat:
+    path: "{{ catalina_base }}"
+  register: tomcat_installed
+
+- name: tomcat install block
+  when: not tomcat_installed.stat.exists
+  block:
+
+    - name: when install_mode == 'local' block
+      when: install_mode == 'local'
+      block:
+        - name: install_mode == 'local' - download tomcat {{ tomcat_minor_version }}
+          delegate_to: localhost
+          get_url:
+            url: "{{ tomcat_dl_url }}"
+            dest: /tmp
+  #          checksum: "sha512:{{ tomcat_dl_url }}.sha512"
+        - name: install_mode == 'local' - copy tomcat archive file to dest host
+          copy:
+            src: /tmp/{{ tomcat_dl_url|basename }}
+            dest: /tmp/{{ tomcat_dl_url|basename }}
+
+    - name: download tomcat {{ tomcat_minor_version }}
+      when: install_mode == 'normal'
+      get_url:
+        url: "{{ tomcat_dl_url }}"
+        dest: /tmp
+        checksum: "sha512:{{ tomcat_dl_url }}.sha512"
+
+    - name: unarchive /tmp/apache-tomcat-{{ tomcat_minor_version }}.tar.gz
+      become: true
+      unarchive:
+        src: /tmp/apache-tomcat-{{ tomcat_minor_version }}.tar.gz
+        dest: /tmp
+        remote_src: yes
+        # owner: "{{ tomcat_instance_user }}"
+        # group: "{{ tomcat_instance_group }}"
+        creates: no
+
+    - name: remove tmp tar file
+      file:
+        path: /tmp/apache-tomcat-{{ tomcat_minor_version }}.tar.gz
+        state: absent
+
+    - name: install_mode == 'local' - remove local tar file
+      delegate_to: localhost
+      file:
+        path: /tmp/apache-tomcat-{{ tomcat_minor_version }}.tar.gz
+        state: absent
+      when: install_mode == 'local'
+
+    - name: Delete useless files
+      become: true
+      file:
+        path: /tmp/apache-tomcat-{{ tomcat_minor_version }}/{{ item }}
+        state: absent
+      with_items:
+        - "{{ useless_file }}"
+
+    - name: set owner to temp directory tomcat
+      become: true
+      file:
+        path: /tmp/apache-tomcat-{{ tomcat_minor_version }}
+        state: directory
+        owner: "{{ tomcat_instance_user }}"
+        group: "{{ tomcat_instance_group }}"
+        recurse: yes
+
+    - name: Create template archive
+      become: true
+      archive:
+        path: /tmp/apache-tomcat-{{ tomcat_minor_version }}/*
+        dest: /tmp/template_tomcat.tar.gz
+        format: gz
+
+    - name: create tomcat instance directory
+      become: true
+      file:
+        path: "{{ catalina_base }}"
+        state: directory
+        owner: "{{ tomcat_instance_user }}"
+        group: "{{ tomcat_instance_group }}"
+  #      recurse: yes
+
+    - name: unarchive template tomcat
+      become: true
+      unarchive:
+        src: /tmp/template_tomcat.tar.gz
+        dest: "{{ catalina_base }}"
+        owner: "{{ tomcat_instance_user }}"
+        group: "{{ tomcat_instance_group }}"
+        remote_src: yes
+
+    # - name: Copy Tomcat template
+    #   copy:
+    #     src: /tmp/apache-tomcat-{{ tomcat_minor_version }}/
+    #     dest: "{{ catalina_base }}"
+    #     owner: "{{ tomcat_instance_user }}"
+    #     group: "{{ tomcat_instance_group }}"
+    #     remote_src: yes
+    #   become: yes
+
+    - name: Delete tomcat template
+      become: true
+      file:
+        path: /tmp/apache-tomcat-{{ tomcat_minor_version }}
+        state: absent
+
+    - name: fichier flag tomcat_version.txt
+      become: true
+      copy:
+        dest: "{{ catalina_base }}/tomcat_version.txt"
+        content: "{{ tomcat_minor_version }}"
+        owner: "{{ tomcat_instance_user }}"
+        group: "{{ tomcat_instance_group }}"
+        mode: '0440'
+
+- name: set tomcat instance directory owner
+  become: true
+  file:
+    path: "{{ catalina_base }}"
+    state: directory
+    owner: "{{ tomcat_instance_user }}"
+    group: "{{ tomcat_instance_group }}"
+    mode: 0750
+    recurse: yes
+
+- name: set tomcat root directory owner
+  become: true
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  loop:
+    - "{{ tomcat_root_dir }}"
+    - "{{ tomcat_root_dir }}/{{ tomcat_medium_version }}"
+
+- name: create {{ catalina_base }}/logs
+  become: true
+  file:
+    path: "{{ catalina_base }}/logs"
+    state: directory
+    owner: "{{ tomcat_instance_user }}"
+    group: "{{ tomcat_instance_group }}"

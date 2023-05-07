@@ -1,0 +1,38 @@
+---
+
+- name: stop "{{ tomcat_service }}" service
+  become: true
+  systemd:
+    name: "{{ tomcat_service }}"
+    enabled: false
+    state: stopped
+  ignore_errors: true
+
+- name: remove tomcat instance files
+  become: true
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/apache-tomcat-{{ tomcat_minor_version }}.tar.gz
+    - /tmp/apache-tomcat-{{ tomcat_medium_version }}
+    - "{{ catalina_base }}"
+    - /etc/systemd/system/{{ tomcat_service }}.service
+    - /etc/logrotate.d/{{ tomcat_service }}
+    - /etc/{{ tomcat_instance_name }}
+    - /var/log/{{ tomcat_service }}
+    - /home/{{ tomcat_instance_user }}
+
+- name: remove the "{{ tomcat_instance_user }}" user
+  become: true
+  user:
+    name: "{{ tomcat_instance_user }}"
+    state: absent
+#    remove: true
+  ignore_errors: true
+
+- name: remove the "{{ tomcat_instance_group }}" group
+  become: true
+  group:
+    name: "{{ tomcat_instance_group }}"
+    state: absent

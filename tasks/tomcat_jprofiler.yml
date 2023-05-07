@@ -1,0 +1,74 @@
+---
+- name: check if jprofiler install dir exists
+  stat:
+    path: /opt/jprofiler{{ jprofiler_major_version }}
+  register: jprofiler_installed
+
+- name: jprofiler install block
+  when: not jprofiler_installed.stat.exists or jprofiler_force_install
+  block:
+
+    - name: when install_mode == 'local' block
+      when: install_mode == 'local'
+      block:
+        - name: install_mode == 'local' - download jprofiler
+          delegate_to: localhost
+          get_url:
+            url: "{{ jprofiler_dl_url }}"
+            dest: /tmp
+      #      checksum: "sha512:{{ jprofiler_dl_url }}.sha512"
+        - name: install_mode == 'local' - copy jprofiler archive file to dest host
+          copy:
+            src: /tmp/{{ jprofiler_dl_url|basename }}
+            dest: /tmp/{{ jprofiler_dl_url|basename }}
+
+    - name: download jprofiler {{ jprofiler_major_version }}
+      when: install_mode == 'normal'
+      get_url:
+        url: "{{ jprofiler_dl_url }}"
+        dest: /tmp
+  #      checksum: "sha512:{{ jprofiler_dl_url }}.sha512"
+
+    - name: unarchive /tmp/{{ jprofiler_dl_url|basename }}
+      become: true
+      unarchive:
+        src: /tmp/{{ jprofiler_dl_url|basename }}
+        dest: /opt
+        remote_src: yes
+        owner: tomcat
+        group: tomcat
+        creates: no
+
+    - name: rename jprofiler dir with major version only
+      become: true
+      command: mv /opt/jprofiler{{ jprofiler_version|replace('_', '.') }} /opt/jprofiler{{ jprofiler_major_version }}
+
+    - name: remove tmp jprofiler archive file
+      become: true
+      file:
+        path: /tmp/jprofiler_linux-x64_{{ jprofiler_version }}.tar.gz
+        state: absent
+
+    - name: install_mode == 'local' - remove tmp jprofiler archive file
+      delegate_to: localhost
+      file:
+        path: /tmp/jprofiler_linux-x64_{{ jprofiler_version }}.tar.gz
+        state: absent
+      when: install_mode == 'local'
+
+    - name: Delete useless files
+      become: true
+      file:
+        path: /opt/jprofiler{{ jprofiler_major_version }}/{{ item }}
+        state: absent
+      with_items:
+        - demo
+
+- name: set owner to jprofiler install dir
+  become: true
+  file:
+    path: /opt/jprofiler{{ jprofiler_major_version }}
+    state: directory
+    owner: tomcat
+    group: tomcat
+    recurse: yes

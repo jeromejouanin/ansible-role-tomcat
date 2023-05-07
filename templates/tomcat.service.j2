@@ -1,0 +1,26 @@
+[Unit]
+Description=Apache Tomcat Web Application Container
+After=network.target
+
+[Service]
+Type=forking
+
+Environment=JAVA_HOME={{ java_home }}
+Environment=CATALINA_PID={{ catalina_base }}/temp/tomcat.pid
+Environment=CATALINA_HOME={{ catalina_base }}
+Environment=CATALINA_BASE={{ catalina_base }}
+Environment='CATALINA_OPTS={{ java_Xm_conf }} -server -XX:+UseParallelGC'
+Environment='JAVA_OPTS=-Djava.awt.headless=true -Djava.security.egd=file:/dev/./urandom'
+
+ExecStart={{ catalina_base }}/bin/startup.sh
+ExecStop={{ catalina_base }}/bin/shutdown.sh
+
+User={{ tomcat_instance_user }}
+Group={{ tomcat_instance_group }}
+UMask=0007
+RestartSec=10
+Restart=always
+WorkingDirectory={{ catalina_base }}
+
+[Install]
+WantedBy=multi-user.target

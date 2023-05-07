@@ -1,0 +1,109 @@
+---
+- name: tomcat-vault - install tomcat-vault.jar file
+  become: true
+  copy:
+    src: "{{ tomcat_vault_jar_filename }}"
+    dest: "{{ catalina_base }}/lib/tomcat-vault.jar"
+    owner: "{{ tomcat_instance_user }}"
+    group: "{{ tomcat_instance_group }}"
+    mode: 0750
+- name: tomcat-vault - install vault.sh file
+  become: true
+  copy:
+    src: "vault.sh"
+    dest: "{{ catalina_base }}/bin/vault.sh"
+    owner: "{{ tomcat_instance_user }}"
+    group: "{{ tomcat_instance_group }}"
+    mode: 0750
+
+- name: tomcat-vault - Enable Tomcat's Digester uses the tomcat-vault PropertySource implementation
+  become: true
+  blockinfile:
+    path: "{{ catalina_base }}/conf/catalina.properties"
+    block: |
+      org.apache.tomcat.util.digester.PROPERTY_SOURCE=org.apache.tomcat.vault.util.PropertySourceVault
+      org.apache.tomcat.util.digester.REPLACE_SYSTEM_PROPERTIES=true
+
+- name: tomcat-vault - Delete tomcat vault keystore
+  become: true
+  when: tomcat_vault_recreate_keystore
+  file:
+    path: "{{ catalina_base }}/vault.keystore"
+    state: absent
+- name: tomcat-vault - (Re)create keystore for the vault
+  become: true
+  command: >
+    {{ java_home }}/bin/keytool -genseckey -keystore {{ catalina_base }}/vault.keystore
+        -alias "vault_{{ tomcat_instance_user }}" -storetype jceks -keyalg AES -keysize 128
+        -storepass {{ vault_keystore_pwd }} -keypass {{ vault_keystore_pwd }}
+
+# keystore consultable avec la commande : keytool -keystore vault.keystore -storetype jceks -list    # (saisir Entrée 2x)
+
+- name: tomcat-vault - Change keystore file owner
+  become: true
+  file:
+    path: "{{ catalina_base }}/vault.keystore"
+    mode: 0640
+    owner: "{{ tomcat_instance_user }}"
+    group: "{{ tomcat_instance_group }}"
+
+#- name: tomcat-vault - Delete VAULT.dat (coffre fort)
+#  become: true
+#  when: tomcat_vault_recreate_keystore
+#  file:
+#    path: "{{ catalina_base }}/vault-enc-dir/VAULT.dat"
+#    state: absent
+- name: tomcat-vault - Initialize the VAULT.dat and save vault.properties
+  become: true
+  when: tomcat_vault_recreate_keystore
+  command: >
+    {{ catalina_base }}/bin/vault.sh --keystore {{ catalina_base }}/vault.keystore
+        --keystore-password {{ vault_keystore_pwd }} --alias "vault_{{ tomcat_instance_user }}"
+        --enc-dir {{ catalina_base }}/vault-enc-dir --iteration 79 --salt 4123wxyz
+        -g {{ catalina_base }}/conf/vault.properties
+
+- name: tomcat-vault - Change vault dat path perm
+  become: true
+  file:
+    path: "{{ catalina_base }}/vault-enc-dir"
+    mode: 0750
+    owner: "{{ tomcat_instance_user }}"
+    group: "{{ tomcat_instance_group }}"
+
+- name: tomcat-vault - Change vault.properties owner and perm
+  become: true
+  file:
+    path: "{{ catalina_base }}/conf/vault.properties"
+    mode: 0640
+    owner: "{{ tomcat_instance_user }}"
+    group: "{{ tomcat_instance_group }}"
+
+# Info :
+# Une première version de ce code faisait un test d'existence de l'attribut dans les données vault
+# pour savoir si l'ajouter ou pas .. bonne pratique .. mais ..
+# finalement on le supprime et recrée systématiquement car on ne peut pas tester que la valeur soit exacte en cas de doute
+- name: tomcat-vault - Remove secured attribute VAULT::JAVA::keystore_pwd from the VAULT.dat
+  become: true
+  when: tomcat_vault_recreate_keystore
+  command: >
+    {{ catalina_base }}/bin/vault.sh --keystore {{ catalina_base }}/vault.keystore
+        --keystore-password {{ vault_keystore_pwd }} --alias "vault_{{ tomcat_instance_user }}"
+        --enc-dir {{ catalina_base }}/vault-enc-dir --iteration 79 --salt 4123wxyz
+        --vault-block JAVA --attribute keystore_pwd --remove-sec-attr {{ keystore_pwd }}
+
+# for java keystore in server.xml
+- name: tomcat-vault - Add secured attribute VAULT::JAVA::keystore_pwd to the VAULT.dat
+  become: true
+  command: >
+    {{ catalina_base }}/bin/vault.sh --keystore {{ catalina_base }}/vault.keystore
+        --keystore-password {{ vault_keystore_pwd }} --alias "vault_{{ tomcat_instance_user }}"
+        --enc-dir {{ catalina_base }}/vault-enc-dir --iteration 79 --salt 4123wxyz
+        --vault-block JAVA --attribute keystore_pwd --sec-attr {{ keystore_pwd }}
+
+- name: tomcat-vault - Change VAULT.dat path perm
+  become: true
+  file:
+    path: "{{ catalina_base }}/vault-enc-dir/VAULT.dat"
+    mode: 0640
+    owner: "{{ tomcat_instance_user }}"
+    group: "{{ tomcat_instance_group }}"

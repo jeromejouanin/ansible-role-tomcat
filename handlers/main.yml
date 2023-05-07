@@ -1,0 +1,7 @@
+---
+- name: "handler restart {{ tomcat_service }}"
+  become: true
+  systemd:
+    name: "{{ tomcat_service }}.service"
+    state: restarted
+    daemon-reload: yes

@@ -1,0 +1,15 @@
+---
+- name: "check if catalina_base {{ catalina_base }} exists"
+  stat:
+    path: "{{ catalina_base }}"
+  register: _get_catalina_base_dir_info
+  ignore_errors: true
+
+#tomcat_service_action: restarted par défaut dans defaults/main.yml # reloaded, restarted, started, stopped
+- name: "systemctl {{ tomcat_service_action }} {{ tomcat_service }} if catalina_base exists"
+  become: true
+  when: _get_catalina_base_dir_info.stat.exists
+  systemd:
+    name: "{{ tomcat_service }}.service"
+    state: "{{ tomcat_service_action }}"
+    daemon-reload: yes
